@@ -24,9 +24,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Topic is required." });
   }
 
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
+    return res.status(500).json({ error: "Server is missing GEMINI_API_KEY or VITE_GEMINI_API_KEY." });
   }
 
   try {
@@ -43,6 +43,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Unable to generate content. Check your API key." });
+    return res.status(500).json({ error: error?.message || "Unable to generate content. Check your API key." });
   }
 }

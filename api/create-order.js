@@ -21,11 +21,11 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid package selected." });
   }
 
-  const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-  const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+  const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY;
+  const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || process.env.VITE_RAZORPAY_KEY_SECRET;
 
   if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-    return res.status(500).json({ error: "Razorpay credentials are not configured." });
+    return res.status(500).json({ error: "Razorpay credentials are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." });
   }
 
   try {

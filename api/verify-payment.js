@@ -10,9 +10,9 @@ export default function handler(req, res) {
     return res.status(400).json({ error: "Payment verification fields are required." });
   }
 
-  const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+  const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || process.env.VITE_RAZORPAY_KEY_SECRET;
   if (!RAZORPAY_KEY_SECRET) {
-    return res.status(500).json({ error: "Razorpay secret is not configured." });
+    return res.status(500).json({ error: "Razorpay secret is not configured. Set RAZORPAY_KEY_SECRET." });
   }
 
   const generatedSignature = crypto

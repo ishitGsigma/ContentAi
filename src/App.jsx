@@ -169,7 +169,7 @@ export default function App() {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || "Generation failed.");
+        throw new Error(data?.error || JSON.stringify(data) || "Generation failed.");
       }
 
       const text = data.text || "";
@@ -194,7 +194,8 @@ export default function App() {
       }
     } catch (error) {
       console.error(error);
-      setGenErr(error.message || "Generation failed. Check your API key.");
+      const msg = error?.message || String(error) || "Generation failed. Check your API key.";
+      setGenErr(msg);
     } finally {
       setLoading(false);
     }
