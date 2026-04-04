@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "cross-env NODE_ENV=production node server.js"
+    "start": "vite"
   },
   "dependencies": {
     "@google/generative-ai": "*",
