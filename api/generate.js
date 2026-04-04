@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   }
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  const GEMINI_MODEL = process.env.GEMINI_MODEL || "text-bison-001";
   if (!GEMINI_API_KEY) {
     return res.status(500).json({ error: "Server is missing GEMINI_API_KEY or VITE_GEMINI_API_KEY." });
   }
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
   try {
     const prompt = buildPrompt(tool, topic, details);
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "text-bison-001" });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
