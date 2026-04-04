@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   try {
     const prompt = buildPrompt(tool, topic, details);
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "text-bison-001" });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
