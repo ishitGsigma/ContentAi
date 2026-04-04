@@ -20,7 +20,7 @@ A lightweight React + Vite app with a backend proxy to Google Generative Languag
 
    ```env
    GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-   GEMINI_MODEL=text-bison-001
+   GEMINI_MODEL=gemini-2.5-flash
    RAZORPAY_KEY_ID=YOUR_RAZORPAY_KEY_ID
    RAZORPAY_KEY_SECRET=YOUR_RAZORPAY_KEY_SECRET
    ```
