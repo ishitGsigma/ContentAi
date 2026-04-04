@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,6 +16,8 @@ const PORT = process.env.PORT || 4173;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const razorpay = new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET });
 
 const PACKAGES = {
@@ -51,41 +54,18 @@ app.post("/api/generate", async (req, res) => {
 
   try {
     const prompt = buildPrompt(tool, topic, details);
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 512,
-          },
-        }),
-      }
-    );
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data?.error?.message || "Google API error." });
-    }
-
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
     if (!text) {
-      return res.status(500).json({ error: "Empty response from Google API." });
+      return res.status(500).json({ error: "Empty response from Gemini API." });
     }
 
     return res.json({ text });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Unable to generate content." });
+    return res.status(500).json({ error: "Unable to generate content. Check your API key." });
   }
 });
 
