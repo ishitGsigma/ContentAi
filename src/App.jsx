@@ -15,7 +15,19 @@ import {
   FaEnvelope,
   FaLock,
   FaEye,
-  FaEyeSlash
+  FaEyeSlash,
+  FaCopy,
+  FaDownload,
+  FaImage,
+  FaLink,
+  FaCheck,
+  FaExclamationTriangle,
+  FaInfoCircle,
+  FaCoins,
+  FaInfinity,
+  FaThumbsUp,
+  FaThumbsDown,
+  FaMeh
 } from "react-icons/fa";
 
 const ADMIN_EMAIL = "admin@contentai.com";
@@ -35,6 +47,14 @@ const TOOLS = [
   { id: "ad", label: "Ad copy", desc: "Google & Meta variations", icon: FaShoppingCart },
   { id: "youtube", label: "YouTube script", desc: "Hook, content, outro", icon: FaVideo },
   { id: "product", label: "Product description", desc: "E-commerce listings", icon: FaShoppingCart },
+];
+
+const MOTION_ITEMS = [
+  { id: 'item-a', top: '14%', left: '12%', size: 12, delay: 0, color: '#70e3ff' },
+  { id: 'item-b', top: '24%', left: '75%', size: 14, delay: 0.15, color: '#c065ff' },
+  { id: 'item-c', top: '68%', left: '20%', size: 10, delay: 0.28, color: '#75ffd3' },
+  { id: 'item-d', top: '58%', left: '82%', size: 16, delay: 0.05, color: '#86b0ff' },
+  { id: 'item-e', top: '42%', left: '46%', size: 10, delay: 0.22, color: '#f36cff' },
 ];
 
 const buildPrompt = (tool, topic, details) => {
@@ -62,6 +82,67 @@ const saveUsers = (db) => {
   localStorage.setItem("_cai_users", JSON.stringify(db));
 };
 
+function parseContent(text) {
+  if (!text) return { content: "", links: [], imageSuggestions: [] };
+
+  const links = [];
+  const imageSuggestions = [];
+
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  let linkIndex = 0;
+  const contentWithLinks = text.replace(urlRegex, (match) => {
+    links.push(match);
+    return `__LINK_${linkIndex++}__`;
+  });
+
+  const imageRegex = /(?:create|generate|design|make)\s+(?:an?\s+)?(?:image|picture|photo|graphic|illustration|banner|thumbnail|logo)(?:\s+of|\s+for|\s+showing|\s+with|\s+that|\s+depicting)?\s*([^.!?\n]*)/gi;
+  let match;
+  while ((match = imageRegex.exec(text)) !== null) {
+    const suggestion = match[0].trim();
+    if (suggestion.length > 10) {
+      imageSuggestions.push(suggestion);
+    }
+  }
+
+  return { content: contentWithLinks, links, imageSuggestions };
+}
+
+const ContentDisplay = ({ text }) => {
+  const { content, links } = parseContent(text);
+
+  const renderContent = () => {
+    const parts = content.split(/(__LINK_\d+__)/);
+    return parts.map((part, index) => {
+      const linkMatch = part.match(/__LINK_(\d+)__/);
+      if (linkMatch) {
+        const linkIndex = parseInt(linkMatch[1], 10);
+        const url = links[linkIndex];
+        return (
+          <motion.a
+            key={index}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center px-2 py-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded text-blue-300 hover:text-blue-200 transition-colors duration-200"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <FaLink className="mr-1 text-xs" />
+            {url.length > 50 ? `${url.substring(0, 47)}...` : url}
+          </motion.a>
+        );
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
+  return (
+    <div className="whitespace-pre-wrap text-gray-100 leading-relaxed">
+      {renderContent()}
+    </div>
+  );
+};
+
 export default function App() {
   const [page, setPage] = useState("auth");
   const [authMode, setAuthMode] = useState("login");
@@ -83,6 +164,14 @@ export default function App() {
   const [genErr, setGenErr] = useState("");
   const [paymentErr, setPaymentErr] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+
+  const [copied, setCopied] = useState(false);
+  const [imageSuggestions, setImageSuggestions] = useState([]);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImagePrompt, setSelectedImagePrompt] = useState("");
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const db = loadUsers();
@@ -176,6 +265,13 @@ export default function App() {
     setLoading(true);
     setGenErr("");
     setOutput("");
+    setImageSuggestions([]);
+    setGenerationProgress(0);
+
+    // Simulate progress
+    const progressInterval = setInterval(() => {
+      setGenerationProgress(prev => Math.min(prev + 10, 90));
+    }, 200);
 
     try {
       const response = await fetch("/api/generate", {
@@ -198,6 +294,13 @@ export default function App() {
 
       setOutput(text);
 
+      // Parse content for image suggestions
+      const { imageSuggestions: suggestions } = parseContent(text);
+      setImageSuggestions(suggestions);
+
+      clearInterval(progressInterval);
+      setGenerationProgress(100);
+
       if (!isAdmin) {
         const updated = {
           ...user,
@@ -215,6 +318,8 @@ export default function App() {
       console.error(error);
       const msg = error?.message || String(error) || "Generation failed. Check your API key.";
       setGenErr(msg);
+      clearInterval(progressInterval);
+      setGenerationProgress(0);
     } finally {
       setLoading(false);
     }
@@ -303,6 +408,76 @@ export default function App() {
     }
   };
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(output);
+      addNotification("Content copied to clipboard!", "success");
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      addNotification("Failed to copy to clipboard", "error");
+    }
+  };
+
+  const addNotification = (message, type = "info") => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 3000);
+  };
+
+  const downloadAsText = () => {
+    const blob = new Blob([output], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `content-${tool}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const submitFeedback = async () => {
+    addNotification("Feedback is disabled for this workspace.", "info");
+  };
+
+  function parseContent(text) {
+    if (!text) return { content: "", links: [], imageSuggestions: [] };
+
+    const links = [];
+    const imageSuggestions = [];
+
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    let linkIndex = 0;
+    const contentWithLinks = text.replace(urlRegex, (match) => {
+      links.push(match);
+      return `__LINK_${linkIndex++}__`;
+    });
+
+    const imageRegex = /(?:create|generate|design|make)\s+(?:an?\s+)?(?:image|picture|photo|graphic|illustration|banner|thumbnail|logo)(?:\s+of|\s+for|\s+showing|\s+with|\s+that|\s+depicting)?\s*([^.!?\n]*)/gi;
+    let match;
+    while ((match = imageRegex.exec(text)) !== null) {
+      const suggestion = match[0].trim();
+      if (suggestion.length > 10) {
+        imageSuggestions.push(suggestion);
+      }
+    }
+
+    return { content: contentWithLinks, links, imageSuggestions };
+  }
+
+  const generateImage = async (prompt) => {
+    setImageGenerating(true);
+    setSelectedImagePrompt(prompt);
+    // Here you would integrate with an image generation API like DALL-E, Midjourney, etc.
+    // For now, we'll just show a placeholder
+    setTimeout(() => {
+      setImageGenerating(false);
+      alert(`Image generation feature would create an image for: "${prompt}"\n\nThis would integrate with services like DALL-E, Midjourney, or Stable Diffusion.`);
+    }, 2000);
+  };
+
   const pageVariants = {
     initial: { opacity: 0, y: 20 },
     in: { opacity: 1, y: 0 },
@@ -318,121 +493,159 @@ export default function App() {
   if (page === "auth") {
     return (
       <motion.div
-        className="container max-w-md mx-auto flex items-center justify-center min-h-screen"
+        className="container max-w-6xl mx-auto auth-shell"
         initial="initial"
         animate="in"
         exit="out"
         variants={pageVariants}
         transition={pageTransition}
       >
-        <div className="w-full">
+        <div className="auth-layout">
           <motion.div
-            className="text-center mb-8"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 260, damping: 20 }}
+            className="auth-panel auth-hero-panel"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1, duration: 0.8 }}
           >
-            <FaRobot className="text-6xl mx-auto mb-4 gradient-text floating" />
-            <h1 className="text-4xl font-bold mb-2">ContentAI Studio</h1>
-            <p className="text-gray-400">AI-Powered Content Creation</p>
+            <div className="auth-badge">ContentAI Studio</div>
+            <div className="auth-hero-copy">
+              <div className="hero-eyebrow">Welcome to your signature AI studio</div>
+              <h1 className="auth-hero-title">ContentAI Studio</h1>
+              <p className="auth-hero-description">
+                Launch mind-bending content in seconds with the most immersive AI workspace.
+                Designed for creators, marketers, and founders who want impact from day one.
+              </p>
+            </div>
+            <div className="hero-feature-grid">
+              <div>
+                <span>01</span>
+                <p>Lightning-fast content workflows</p>
+              </div>
+              <div>
+                <span>02</span>
+                <p>Polished output with pro prompts</p>
+              </div>
+              <div>
+                <span>03</span>
+                <p>Smart credit tracking and client-ready copy</p>
+              </div>
+            </div>
+            <div className="auth-footer-note">
+              Built by <strong>ISHIT GOVIL</strong> with an obsession for next-level interface motion.
+            </div>
           </motion.div>
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={authMode}
-              initial={{ opacity: 0, x: authMode === "login" ? -20 : 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: authMode === "login" ? 20 : -20 }}
-              transition={{ duration: 0.3 }}
-              className="card p-6"
-            >
-              {authMode === "register" && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mb-4"
-                >
-                  <label className="block text-sm font-medium mb-2 flex items-center">
-                    <FaUser className="mr-2" /> Name
-                  </label>
-                  <input
-                    className="w-full"
-                    placeholder="Your full name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </motion.div>
-              )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2 flex items-center">
-                  <FaEnvelope className="mr-2" /> Email
-                </label>
-                <input
-                  className="w-full"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+          <motion.div
+            className="auth-panel auth-card"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+          >
+            <div className="auth-card-header">
+              <div>
+                <p className="text-sm uppercase tracking-[0.25em] text-blue-300">ContentAI Studio</p>
+                <h2 className="text-3xl font-bold mt-2">{authMode === "login" ? "Welcome back" : "Create your studio"}</h2>
               </div>
+              <div className="card-tag">Fast | Creative | Smart</div>
+            </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2 flex items-center">
-                  <FaLock className="mr-2" /> Password
-                </label>
-                <div className="relative">
-                  <input
-                    className="w-full pr-10"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Your password"
-                    value={pw}
-                    onChange={(e) => setPw(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
-                    onClick={() => setShowPassword(!showPassword)}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={authMode}
+                initial={{ opacity: 0, y: authMode === "login" ? -10 : 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: authMode === "login" ? 10 : -10 }}
+                transition={{ duration: 0.25 }}
+              >
+                {authMode === "register" && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mb-5"
                   >
-                    {showPassword ? <FaEyeSlash /> : <FaEye />}
-                  </button>
+                    <label className="input-label">Name</label>
+                    <div className="input-group">
+                      <FaUser className="input-icon" />
+                      <input
+                        className="input-field"
+                        placeholder="Your full name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+
+                <div className="mb-5">
+                  <label className="input-label">Email</label>
+                  <div className="input-group">
+                    <FaEnvelope className="input-icon" />
+                    <input
+                      className="input-field"
+                      type="email"
+                      placeholder="you@domain.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {authErr && (
-                <motion.p
-                  className="text-red-400 mb-4 text-center"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                <div className="mb-5">
+                  <label className="input-label">Password</label>
+                  <div className="input-group">
+                    <FaLock className="input-icon" />
+                    <input
+                      className="input-field pr-12"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={pw}
+                      onChange={(e) => setPw(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </button>
+                  </div>
+                </div>
+
+                {authErr && (
+                  <motion.p
+                    className="error-note"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    {authErr}
+                  </motion.p>
+                )}
+
+                <motion.button
+                  className="w-full mb-4 auth-action-button"
+                  onClick={authMode === "login" ? doLogin : doRegister}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
                 >
-                  {authErr}
-                </motion.p>
-              )}
+                  {authMode === "login" ? "Login to Studio" : "Create Account"}
+                </motion.button>
 
-              <motion.button
-                className="w-full mb-4"
-                onClick={authMode === "login" ? doLogin : doRegister}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                {authMode === "login" ? "Login" : "Create Account"}
-              </motion.button>
-
-              <motion.button
-                className="w-full bg-transparent border border-gray-600 hover:border-gray-400"
-                onClick={() => {
-                  setAuthMode(authMode === "login" ? "register" : "login");
-                  setAuthErr("");
-                  setName("");
-                }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                Switch to {authMode === "login" ? "Register" : "Login"}
-              </motion.button>
-            </motion.div>
-          </AnimatePresence>
+                <motion.button
+                  className="w-full auth-secondary-button"
+                  onClick={() => {
+                    setAuthMode(authMode === "login" ? "register" : "login");
+                    setAuthErr("");
+                    setName("");
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {authMode === "login" ? "Join now" : "Already have an account?"}
+                </motion.button>
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
         </div>
       </motion.div>
     );
@@ -447,6 +660,31 @@ export default function App() {
       variants={pageVariants}
       transition={pageTransition}
     >
+      {/* Notification System */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        <AnimatePresence>
+          {notifications.map((notification) => (
+            <motion.div
+              key={notification.id}
+              initial={{ opacity: 0, x: 300 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 300 }}
+              className={`p-4 rounded-lg shadow-lg max-w-sm ${
+                notification.type === 'success' ? 'bg-green-600' :
+                notification.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+              }`}
+            >
+              <div className="flex items-center">
+                {notification.type === 'success' && <FaCheck className="mr-2" />}
+                {notification.type === 'error' && <FaExclamationTriangle className="mr-2" />}
+                {notification.type === 'info' && <FaInfoCircle className="mr-2" />}
+                <span>{notification.message}</span>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       <motion.div
         className="flex justify-between items-center mb-8"
         initial={{ opacity: 0, y: -20 }}
@@ -457,7 +695,19 @@ export default function App() {
           <FaRobot className="text-3xl mr-3 gradient-text" />
           <div>
             <h1 className="text-3xl font-bold">Welcome, {user?.name}</h1>
-            <p className="text-gray-400">Credits: {isAdmin ? "Unlimited" : user?.credits}</p>
+            <div className="flex items-center mt-1">
+              <FaCoins className="text-yellow-400 mr-2 text-lg" />
+              {isAdmin ? (
+                <FaInfinity className="text-purple-400 text-xl animate-pulse" />
+              ) : (
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: Math.min(user?.credits || 0, 5) }, (_, i) => (
+                    <FaCoins key={i} className="text-yellow-400 text-sm" />
+                  ))}
+                  {user?.credits > 5 && <span className="text-gray-400 ml-1">+{user.credits - 5}</span>}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <motion.button
@@ -503,98 +753,289 @@ export default function App() {
         {tab === "generate" && (
           <motion.div
             key="generate"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.3 }}
-            className="grid md:grid-cols-2 gap-8"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -24 }}
+            transition={{ duration: 0.38, ease: "easeOut" }}
+            className="generate-grid motion-frame"
           >
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium mb-3 flex items-center">
-                  <FaMagic className="mr-2" /> Content Type
-                </label>
-                <select
-                  className="w-full"
-                  value={tool}
-                  onChange={(e) => setTool(e.target.value)}
-                >
-                  {TOOLS.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-gray-400 mt-2">
-                  {TOOLS.find(t => t.id === tool)?.desc}
-                </p>
+            <div className="motion-frame-border" />
+            {MOTION_ITEMS.map((item) => (
+              <motion.div
+                key={item.id}
+                className="motion-frame-item"
+                style={{ top: item.top, left: item.left, width: item.size, height: item.size, background: item.color }}
+                animate={{
+                  x: [0, 16, -10, 0],
+                  y: [0, -12, 10, 0],
+                  rotate: [0, 8, -6, 0]
+                }}
+                transition={{ duration: 6 + item.delay * 3, delay: item.delay, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' }}
+              />
+            ))}
+
+            <motion.div
+              className="glass-panel create-shell"
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow-text">AI Command Console</p>
+                  <h2 className="panel-title">Dark mode content engine</h2>
+                  <p className="panel-description">
+                    Build polished narratives with a premium studio feel, live prompt tuning, and distortion motion.
+                  </p>
+                </div>
+                <span className="neon-pill">ISHIT GOVIL</span>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-3 flex items-center">
-                  <FaMagic className="mr-2" /> Topic
-                </label>
-                <input
-                  className="w-full"
-                  placeholder="Enter your topic..."
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                />
+              <div className="holo-grid">
+                <motion.div className="holo-card" whileHover={{ y: -8 }} whileTap={{ scale: 0.98 }}>
+                  <span>01</span>
+                  <h3>Immersive dashboard</h3>
+                  <p>Every prompt and result lives inside a polished, interactive command center.</p>
+                </motion.div>
+                <motion.div className="holo-card" whileHover={{ y: -8 }} whileTap={{ scale: 0.98 }} transition={{ delay: 0.05 }}>
+                  <span>02</span>
+                  <h3>Distortion vibe</h3>
+                  <p>Animated edges, glass layers, and subtle glow create cinematic motion around your workflow.</p>
+                </motion.div>
+                <motion.div className="holo-card" whileHover={{ y: -8 }} whileTap={{ scale: 0.98 }} transition={{ delay: 0.1 }}>
+                  <span>03</span>
+                  <h3>Fast feedback</h3>
+                  <p>Live progress, prompt clarity meters, and instant editing keep the workflow powerful.</p>
+                </motion.div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-3">Additional Details</label>
-                <textarea
-                  className="w-full"
-                  rows={4}
-                  placeholder="Any specific requirements or context..."
-                  value={details}
-                  onChange={(e) => setDetails(e.target.value)}
-                />
-              </div>
-
-              <motion.button
-                className="w-full flex items-center justify-center"
-                onClick={doGenerate}
-                disabled={loading}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+              <motion.div
+                className="form-section"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08, duration: 0.38 }}
               >
-                {loading ? (
-                  <>
-                    <div className="loading mr-2"></div>
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <FaRocket className="mr-2" />
-                    Generate Content
-                  </>
-                )}
-              </motion.button>
+                <div className="stage-strip">
+                  <div>
+                    <p className="eyebrow-text">Step 1 · Choose your mode</p>
+                    <h3>Pick a content style</h3>
+                  </div>
+                  <div className="status-pill">Distortion Live</div>
+                </div>
 
-              {genErr && (
-                <motion.p
-                  className="text-red-400 text-center"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                <div className="tool-pills">
+                  {TOOLS.map((t) => (
+                    <motion.button
+                      type="button"
+                      key={t.id}
+                      className={`tool-pill ${tool === t.id ? "active" : ""}`}
+                      onClick={() => setTool(t.id)}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <t.icon className="pill-icon" />
+                      <div>
+                        <span>{t.label}</span>
+                        <p>{t.desc}</p>
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="form-section blur-card"
+                initial={{ opacity: 0, y: 22 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.14, duration: 0.38 }}
+              >
+                <label className="input-label">Topic</label>
+                <input
+                  className="input-field"
+                  placeholder="Enter your creative brief..."
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                />
+
+                <label className="input-label">Prompt details</label>
+                <textarea
+                  className="input-field textarea"
+                  rows={5}
+                  placeholder="Mention audience, tone, or any must-have elements..."
+                  value={details}
+                  onChange={(e) => setDetails(e.target.value.slice(0, 500))}
+                  maxLength={500}
+                />
+
+                <div className="meter-row">
+                  <div className="text-sm text-gray-400">Clarity</div>
+                  <div className="meter-strip">
+                    <div
+                      className="meter-fill"
+                      style={{ width: `${Math.min(Math.max(topic.length * 2, 20), 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <motion.button
+                  className="generate-button"
+                  onClick={doGenerate}
+                  disabled={loading}
+                  whileHover={{ scale: loading ? 1 : 1.02 }}
+                  whileTap={{ scale: loading ? 1 : 0.98 }}
                 >
-                  {genErr}
-                </motion.p>
-              )}
-            </div>
+                  {loading ? (
+                    <>
+                      <div className="loading mr-2"></div>
+                      Generating... {generationProgress}%
+                    </>
+                  ) : (
+                    <>
+                      <FaRocket className="mr-2" />
+                      Generate content with distortion flow
+                    </>
+                  )}
+                </motion.button>
 
-            <div>
-              <label className="block text-sm font-medium mb-3">Generated Content</label>
-              <motion.pre
-                className="w-full min-h-96 p-4 rounded-lg bg-gray-800 border border-gray-600 overflow-auto"
+                <motion.button
+                  className="auth-secondary-button mt-4"
+                  onClick={() => {
+                    setTopic("");
+                    setDetails("");
+                    setTool("social");
+                    setOutput("");
+                    setImageSuggestions([]);
+                    setGenErr("");
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  title="Clear form"
+                >
+                  <FaMagic className="mr-2" /> Reset workspace
+                </motion.button>
+
+                {genErr && (
+                  <motion.p
+                    className="text-red-400 text-center mt-3"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                  >
+                    {genErr}
+                  </motion.p>
+                )}
+              </motion.div>
+            </motion.div>
+
+            <motion.div
+              className="glass-panel output-shell"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <div className="panel-header mini">
+                <div>
+                  <p className="eyebrow-text">Step 2 · Output preview</p>
+                  <h3>Interactive content canvas</h3>
+                </div>
+                <div className="mini-stats">
+                  <div>Credits left: {isAdmin ? "∞" : user?.credits}</div>
+                  <div>Prompt power: {Math.min(Math.max(topic.length * 2, 20), 100)}%</div>
+                </div>
+              </div>
+
+              <motion.div
+                className="output-console"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
+                transition={{ delay: 0.16, duration: 0.35 }}
               >
-                {output || "Your generated content will appear here..."}
-              </motion.pre>
-            </div>
+                {output ? (
+                  <div className="space-y-5">
+                    <ContentDisplay text={output} />
+                    {imageSuggestions.length > 0 && (
+                      <motion.div
+                        className="mt-4 p-4 bg-white/5 border border-blue-500/15 rounded-2xl"
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <div className="flex items-center gap-2 mb-3 text-blue-200">
+                          <FaImage className="text-xl" />
+                          <span className="font-semibold">Image idea suggestions</span>
+                        </div>
+                        <div className="space-y-3">
+                          {imageSuggestions.map((suggestion, index) => (
+                            <motion.div
+                              key={index}
+                              className="flex items-center justify-between p-3 bg-[#081523] rounded-2xl border border-white/10"
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.08 }}
+                            >
+                              <span className="text-sm text-gray-300 flex-1 mr-3">{suggestion}</span>
+                              <motion.button
+                                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full text-sm"
+                                onClick={() => generateImage(suggestion)}
+                                disabled={imageGenerating}
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.98 }}
+                              >
+                                {imageGenerating && selectedImagePrompt === suggestion ? (
+                                  <>
+                                    <div className="loading"></div>
+                                    Generating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <FaImage /> Create
+                                  </>
+                                )}
+                              </motion.button>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                  </div>
+                ) : (
+                  <div className="output-placeholder">
+                    <motion.div
+                      initial={{ rotate: -10, scale: 0.85, opacity: 0 }}
+                      animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    >
+                      <FaMagic className="text-6xl" />
+                    </motion.div>
+                    <h3 className="text-xl font-semibold">Everything starts with a spark</h3>
+                    <p className="max-w-xs">
+                      Share your topic and details, then fire up the generator to reveal the distortion-driven content experience.
+                    </p>
+                  </div>
+                )}
+              </motion.div>
+
+              {output && (
+                <div className="action-strip">
+                  <motion.button
+                    className="flex items-center justify-center bg-gradient-to-r from-sky-500 to-violet-600 rounded-xl px-4 py-3"
+                    onClick={copyToClipboard}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <FaCopy className="mr-2" /> Copy text
+                  </motion.button>
+                  <motion.button
+                    className="flex items-center justify-center bg-gray-800/90 border border-white/10 rounded-xl px-4 py-3"
+                    onClick={downloadAsText}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <FaDownload className="mr-2" /> Download story
+                  </motion.button>
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
 
@@ -681,6 +1122,7 @@ export default function App() {
                 </motion.div>
               ))}
             </div>
+
           </motion.div>
         )}
       </AnimatePresence>
